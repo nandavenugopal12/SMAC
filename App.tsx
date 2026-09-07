@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { LoginScreen } from './Screens/LoginScreen';
+import { View, StyleSheet } from 'react-native';
 import { HomeScreen } from './Screens/HomeScreen';
 import { PlansScreen } from './Screens/PlansScreen';
 
+type Screen = 'home' | 'plans';
+
 export default function App() {
-  const [screen, setScreen] = useState<'login' | 'home' | 'plans'>('login');
-
-  if (screen === 'login') {
-    return <LoginScreen onLogin={() => setScreen('home')} />;
-  }
-
-  if (screen === 'plans') {
-    return <PlansScreen onBack={() => setScreen('home')} />;
-  }
-
-  return <HomeScreen onNavigateToPlans={() => setScreen('plans')} />;
+  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
+  return (
+    <View style={styles.container}>
+      {currentScreen === 'home' && <HomeScreen onNavigateToPlans={() => setCurrentScreen('plans')} />}
+      {currentScreen === 'plans' && <PlansScreen onBack={() => setCurrentScreen('home')} />}
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({ container: { flex: 1 } });
