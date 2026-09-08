@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Nayah",
+    "slug": "smac-family-quests",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Nayah to track an active drive task and detect arrival at its destination."
+        }
+      ],
+      "expo-font"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F4F1E8"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "sdkVersion": "57.0.0"
+  }
+}
