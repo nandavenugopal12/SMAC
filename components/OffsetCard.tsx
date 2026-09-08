@@ -19,41 +19,19 @@ export function OffsetCard({
   children,
   style,
   contentStyle,
-  shadowColor = '#152820',
+  shadowColor = '#000000',
   offset = 5,
   radius = 22,
 }: OffsetCardProps) {
   return (
-    <View style={style}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fill,
-          styles.shadowPlate,
-          {
-            backgroundColor: shadowColor,
-            borderRadius: radius,
-            transform: [{ translateX: offset }, { translateY: offset }],
-          },
-        ]}
-      />
+    <View style={[styles.wrapper, { shadowColor, shadowOffset: { width: 0, height: offset } }, style]}>
       <View style={[styles.content, { borderRadius: radius }, contentStyle]}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  shadowPlate: {
-    borderWidth: 1,
-    borderColor: '#152820',
-  },
+  wrapper: { shadowOpacity: 0.08, shadowRadius: 10, elevation: 2 },
   content: {
     backgroundColor: '#FFFFFF',
   },

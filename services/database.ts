@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { ActiveQuest, CapabilityRole, EarnedBadge, Family, FamilyMember, QuestDetails, QuestPlan, QuestSubtask, User } from '../types';
+import type { ActiveQuest, CapabilityRole, EarnedBadge, Family, FamilyMember, QuestCategory, QuestDetails, QuestPlan, QuestSubtask, User } from '../types';
 
 type UserRow = { id: number; name: string; email: string; age: number; roles: string; password_hash?: string; password_salt?: string };
 type FamilyRow = { id: number; name: string; joinCode: string; membershipRole: 'owner' | 'member' };
@@ -40,6 +40,7 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     CREATE TABLE IF NOT EXISTS quests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+      category TEXT NOT NULL DEFAULT 'family',
       title TEXT NOT NULL,
       summary TEXT NOT NULL,
       total_estimated_minutes INTEGER NOT NULL,
@@ -55,6 +56,9 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       estimated_minutes INTEGER NOT NULL,
       skill TEXT NOT NULL,
       do_together INTEGER NOT NULL DEFAULT 0,
+      destination TEXT NOT NULL DEFAULT '',
+      destination_latitude REAL,
+      destination_longitude REAL,
       sort_order INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','accepted','completed'))
     );
@@ -70,6 +74,16 @@ export async function initializeDatabase(db: SQLiteDatabase) {
   const subtaskColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(subtasks)');
   if (!subtaskColumns.some(column => column.name === 'destination')) {
     await db.execAsync("ALTER TABLE subtasks ADD COLUMN destination TEXT NOT NULL DEFAULT ''");
+  }
+  if (!subtaskColumns.some(column => column.name === 'destination_latitude')) {
+    await db.execAsync('ALTER TABLE subtasks ADD COLUMN destination_latitude REAL');
+  }
+  if (!subtaskColumns.some(column => column.name === 'destination_longitude')) {
+    await db.execAsync('ALTER TABLE subtasks ADD COLUMN destination_longitude REAL');
+  }
+  const questColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(quests)');
+  if (!questColumns.some(column => column.name === 'category')) {
+    await db.execAsync('ALTER TABLE quests ADD COLUMN category TEXT');
   }
 }
 
@@ -157,19 +171,19 @@ export async function saveQuest(db: SQLiteDatabase, familyId: number, creatorId:
   const tasks = plan.tasks.filter(task => task.title.trim());
   if (title.length < 2) fail('Give the main task a name.');
   if (!tasks.length) fail('Add at least one subtask before publishing.');
-  if (tasks.some(task => task.skill === 'driver' && !task.destination?.trim())) fail('Add a destination for every driver task.');
+  if (tasks.some(task => task.skill === 'driver' && (!Number.isFinite(task.destinationLatitude) || !Number.isFinite(task.destinationLongitude)))) fail('Pin a destination on the map for every driver task.');
   const totalEstimatedMinutes = tasks.reduce((total, task) => total + Math.max(1, task.estimatedMinutes), 0);
   let questId = 0;
   await db.withTransactionAsync(async () => {
     const result = await db.runAsync(
-      'INSERT INTO quests(family_id,title,summary,total_estimated_minutes,created_by) VALUES(?,?,?,?,?)',
-      familyId, title, plan.summary.trim(), totalEstimatedMinutes, creatorId,
+      'INSERT INTO quests(family_id,category,title,summary,total_estimated_minutes,created_by) VALUES(?,?,?,?,?,?)',
+      familyId, plan.category || 'family', title, plan.summary.trim(), totalEstimatedMinutes, creatorId,
     );
     questId = result.lastInsertRowId;
     for (const [index, task] of tasks.entries()) {
       await db.runAsync(
-        'INSERT INTO subtasks(quest_id,title,description,estimated_minutes,skill,do_together,sort_order,destination) VALUES(?,?,?,?,?,?,?,?)',
-        questId, task.title.trim(), task.description.trim(), Math.max(1, task.estimatedMinutes), task.skill, task.doTogether ? 1 : 0, index, task.destination?.trim() || '',
+        'INSERT INTO subtasks(quest_id,title,description,estimated_minutes,skill,do_together,sort_order,destination,destination_latitude,destination_longitude) VALUES(?,?,?,?,?,?,?,?,?,?)',
+        questId, task.title.trim(), task.description.trim(), Math.max(1, task.estimatedMinutes), task.skill, task.doTogether ? 1 : 0, index, task.destination?.trim() || 'Pinned destination', task.destinationLatitude ?? null, task.destinationLongitude ?? null,
       );
     }
   });
@@ -178,14 +192,15 @@ export async function saveQuest(db: SQLiteDatabase, familyId: number, creatorId:
 
 export async function getActiveQuests(db: SQLiteDatabase, familyId: number): Promise<ActiveQuest[]> {
   const rows = await db.getAllAsync<{
-    id: number; title: string; summary: string; totalEstimatedMinutes: number; createdAt: string;
+    id: number; category: string | null; title: string; summary: string; totalEstimatedMinutes: number; createdAt: string; hasDriver: number;
     creatorId: number; creatorName: string; creatorAge: number; creatorRoles: string; creatorMembershipRole: 'owner' | 'member';
     completedSubtasks: number; totalSubtasks: number;
   }>(`
-    SELECT q.id,q.title,q.summary,q.total_estimated_minutes AS totalEstimatedMinutes,q.created_at AS createdAt,
+    SELECT q.id,q.category,q.title,q.summary,q.total_estimated_minutes AS totalEstimatedMinutes,q.created_at AS createdAt,
       u.id AS creatorId,u.name AS creatorName,u.age AS creatorAge,u.roles AS creatorRoles,
       fm.membership_role AS creatorMembershipRole,
       SUM(CASE WHEN s.status='completed' THEN 1 ELSE 0 END) AS completedSubtasks,
+      MAX(CASE WHEN s.skill='driver' THEN 1 ELSE 0 END) AS hasDriver,
       COUNT(s.id) AS totalSubtasks
     FROM quests q
     JOIN users u ON u.id=q.created_by
@@ -208,8 +223,17 @@ export async function getActiveQuests(db: SQLiteDatabase, familyId: number): Pro
     const creator = toMember({ id: row.creatorId, name: row.creatorName, email: '', age: row.creatorAge, roles: row.creatorRoles, membershipRole: row.creatorMembershipRole });
     const total = Number(row.totalSubtasks);
     const completed = Number(row.completedSubtasks);
-    return { id: row.id, title: row.title, summary: row.summary, totalEstimatedMinutes: row.totalEstimatedMinutes, createdAt: row.createdAt, creator, contributors: contributorRows.map(toMember), completedSubtasks: completed, totalSubtasks: total, progress: total ? Math.round(completed / total * 100) : 0 };
+    return { id: row.id, category: resolveQuestCategory(row.category, row.title, row.summary, Boolean(row.hasDriver)), title: row.title, summary: row.summary, totalEstimatedMinutes: row.totalEstimatedMinutes, createdAt: row.createdAt, creator, contributors: contributorRows.map(toMember), completedSubtasks: completed, totalSubtasks: total, progress: total ? Math.round(completed / total * 100) : 0 };
   }));
+}
+
+function resolveQuestCategory(category: string | null, title: string, summary: string, hasDriver: boolean): QuestCategory {
+  if (category === 'food' || category === 'clean' || category === 'family' || category === 'route') return category;
+  if (hasDriver) return 'route';
+  const value = `${title} ${summary}`.toLowerCase();
+  if (/clean|tidy|wash|laundry|dish|vacuum|mop|organize/.test(value)) return 'clean';
+  if (/food|cook|meal|dinner|lunch|breakfast|grocery|kitchen/.test(value)) return 'food';
+  return 'family';
 }
 
 export async function getBadges(db: SQLiteDatabase, userId: number): Promise<EarnedBadge[]> {
@@ -232,9 +256,9 @@ export async function getQuestDetails(db: SQLiteDatabase, familyId: number, ques
   if (!quest) return null;
   const rows = await db.getAllAsync<{
     id: number; questId: number; title: string; description: string; estimatedMinutes: number;
-    skill: CapabilityRole; doTogether: number; destination: string; status: 'open' | 'accepted' | 'completed';
+    skill: CapabilityRole; doTogether: number; destination: string; destinationLatitude: number | null; destinationLongitude: number | null; status: 'open' | 'accepted' | 'completed';
   }>(`SELECT id,quest_id AS questId,title,description,estimated_minutes AS estimatedMinutes,
-      skill,do_together AS doTogether,destination,status
+      skill,do_together AS doTogether,destination,destination_latitude AS destinationLatitude,destination_longitude AS destinationLongitude,status
       FROM subtasks WHERE quest_id=? ORDER BY sort_order,id`, questId);
   const tasks: QuestSubtask[] = await Promise.all(rows.map(async row => {
     const contributors = await db.getAllAsync<UserRow & { membershipRole: 'owner' | 'member'; acceptedAt: string }>(`
@@ -246,6 +270,8 @@ export async function getQuestDetails(db: SQLiteDatabase, familyId: number, ques
       ...row,
       doTogether: Boolean(row.doTogether),
       destination: row.destination || undefined,
+      destinationLatitude: row.destinationLatitude ?? undefined,
+      destinationLongitude: row.destinationLongitude ?? undefined,
       contributors: contributors.map(contributor => ({ ...toMember(contributor), acceptedAt: contributor.acceptedAt })),
     };
   }));

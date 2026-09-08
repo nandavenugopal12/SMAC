@@ -11,8 +11,10 @@
     "doctor": "expo-doctor"
   },
   "dependencies": {
-    "expo": "~57.0.0",
+    "@expo/vector-icons": "^15.0.2",
+    "expo": "~57.0.21",
     "expo-crypto": "~57.0.2",
+    "expo-font": "~57.0.3",
     "expo-location": "~57.0.16",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",

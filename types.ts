@@ -1,4 +1,5 @@
 export type CapabilityRole = 'anyone' | 'adult' | 'cook' | 'driver';
+export type QuestCategory = 'food' | 'clean' | 'family' | 'route';
 
 export interface User {
   id: number;
@@ -28,17 +29,21 @@ export interface QuestTask {
   skill: CapabilityRole;
   doTogether: boolean;
   destination?: string;
+  destinationLatitude?: number;
+  destinationLongitude?: number;
 }
 
 export interface QuestPlan {
   questTitle: string;
   summary: string;
   totalEstimatedMinutes: number;
+  category?: QuestCategory;
   tasks: QuestTask[];
 }
 
 export interface ActiveQuest {
   id: number;
+  category: QuestCategory;
   title: string;
   summary: string;
   totalEstimatedMinutes: number;

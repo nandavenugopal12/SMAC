@@ -10,7 +10,7 @@ import { DashboardScreen } from './Screens/DashboardScreen';
 import { DriveTaskScreen } from './Screens/DriveTaskScreen';
 import { QuestDetailScreen } from './Screens/QuestDetailScreen';
 import { getCurrentUser, getFamilyForUser, initializeDatabase, logout } from './services/database';
-import type { Family, QuestSubtask, User } from './types';
+import type { Family, QuestCategory, QuestSubtask, User } from './types';
 import { theme } from './theme';
 
 function AppContent() {
@@ -21,6 +21,8 @@ function AppContent() {
   const [screen, setScreen] = useState<'dashboard' | 'create' | 'quest' | 'drive'>('dashboard');
   const [selectedQuestId, setSelectedQuestId] = useState<number | null>(null);
   const [driveTask, setDriveTask] = useState<{ task: QuestSubtask; acceptedAt: string } | null>(null);
+  const [createPrompt, setCreatePrompt] = useState('');
+  const [createCategory, setCreateCategory] = useState<QuestCategory | undefined>();
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const refreshSession = useCallback(async () => { const activeUser = await getCurrentUser(db); setUser(activeUser); setFamily(activeUser ? await getFamilyForUser(db, activeUser.id) : null); setLoading(false); }, [db]);
   const handleLogout = useCallback(async () => {
@@ -37,9 +39,13 @@ function AppContent() {
       <CreateTaskScreen
         user={user}
         family={family}
-        onBack={() => setScreen('dashboard')}
+        initialPrompt={createPrompt}
+        initialCategory={createCategory}
+        onBack={() => { setCreatePrompt(''); setCreateCategory(undefined); setScreen('dashboard'); }}
         onCommitted={() => {
           setDashboardRefresh((value) => value + 1);
+          setCreatePrompt('');
+          setCreateCategory(undefined);
           setScreen('dashboard');
         }}
       />
@@ -56,7 +62,7 @@ function AppContent() {
       user={user}
       family={family}
       refreshToken={dashboardRefresh}
-      onCreateTask={() => setScreen('create')}
+      onCreateTask={(prompt, category) => { setCreatePrompt(prompt || ''); setCreateCategory(category); setScreen('create'); }}
       onOpenQuest={(questId) => { setSelectedQuestId(questId); setScreen('quest'); }}
       onLogout={handleLogout}
     />

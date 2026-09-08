@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SMAC",
+    "name": "Nayah",
     "slug": "smac-family-quests",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,9 +10,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow SMAC to track an active drive task and detect arrival at its destination."
+          "locationWhenInUsePermission": "Allow Nayah to track an active drive task and detect arrival at its destination."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true
@@ -25,8 +26,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
-    ,
+    },
     "sdkVersion": "57.0.0"
   }
 }

@@ -1,162 +1,106 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getActiveQuests, getBadges } from '../services/database';
-import type { ActiveQuest, EarnedBadge, Family, FamilyMember, User } from '../types';
+import type { ActiveQuest, EarnedBadge, Family, FamilyMember, QuestCategory, User } from '../types';
 import { theme } from '../theme';
-import { OffsetCard } from '../components/OffsetCard';
 
-const avatarColors = [theme.colors.mint, theme.colors.blue, theme.colors.peach, theme.colors.lavender];
+const accents = [theme.colors.lavender, theme.colors.blue, theme.colors.lime, theme.colors.peach, theme.colors.mint];
+const categoryLooks = {
+  food: { label: 'Food', icon: 'restaurant' as const, color: '#F5D86E' },
+  clean: { label: 'Clean', icon: 'sparkles' as const, color: '#A9D3F3' },
+  family: { label: 'Family', icon: 'people' as const, color: '#D5B6F1' },
+  route: { label: 'Route', icon: 'navigate' as const, color: '#F2B89A' },
+};
+const badgeLooks = [
+  { background: '#FFE29A', soft: '#FFF7DF', border: '#D8A92F', icon: '#F3C94E' },
+  { background: '#D7C4F5', soft: '#F4EEFC', border: '#9270C9', icon: '#B99AE8' },
+  { background: '#A9DCF3', soft: '#EAF7FC', border: '#4C9FC5', icon: '#78C6E8' },
+];
+const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'; };
 
-export function DashboardScreen({ user, family, refreshToken, onCreateTask, onOpenQuest, onLogout }: {
-  user: User;
-  family: Family;
-  refreshToken: number;
-  onCreateTask: () => void;
-  onOpenQuest: (questId: number) => void;
-  onLogout: () => Promise<void>;
-}) {
+export function DashboardScreen({ user, family, refreshToken, onCreateTask, onOpenQuest, onLogout }: { user: User; family: Family; refreshToken: number; onCreateTask: (prompt?: string, category?: QuestCategory) => void; onOpenQuest: (questId: number) => void; onLogout: () => Promise<void> }) {
   const db = useSQLiteContext();
   const [quests, setQuests] = useState<ActiveQuest[]>([]);
   const [badges, setBadges] = useState<EarnedBadge[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const load = useCallback(async () => {
-    const [active, earned] = await Promise.all([getActiveQuests(db, family.id), getBadges(db, user.id)]);
-    setQuests(active);
-    setBadges(earned);
-    setLoading(false);
-  }, [db, family.id, user.id]);
-
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const entrance = useRef(new Animated.Value(0)).current;
+  const load = useCallback(async () => { const [active, earned] = await Promise.all([getActiveQuests(db, family.id), getBadges(db, user.id)]); setQuests(active); setBadges(earned); setLoading(false); }, [db, family.id, user.id]);
   useEffect(() => { load().catch(() => setLoading(false)); }, [load, refreshToken]);
+  useEffect(() => { Animated.spring(entrance, { toValue: 1, friction: 7, useNativeDriver: true }).start(); }, [entrance]);
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView
-        contentContainerStyle={styles.page}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.orange} />}
-      >
-        <View style={styles.topbar}>
-          <View style={styles.brandLockup}><View style={styles.logo}><Text style={styles.logoText}>S</Text></View><Text style={styles.brand}>SMAC</Text></View>
-          <Pressable hitSlop={10} onPress={onLogout}><Text style={styles.logout}>Log out</Text></Pressable>
-        </View>
+  return <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.orange} />}>
+      <Animated.View style={[styles.header, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) }] }]}><View><View style={styles.greetingRow}><Image accessible accessibilityLabel="Nayah" source={require('../assets/nayah-logo.png')} resizeMode="contain" style={styles.dashboardLogo} /><Text style={styles.greeting}>{greeting()}</Text></View><Text style={styles.hello}>Hey, {user.name.split(' ')[0]}.</Text></View><Pressable onPress={() => { setShowSettings(false); setProfileOpen(true); }} accessibilityLabel="Open profile menu" style={styles.mainAvatarRing}><View style={styles.mainAvatar}><Text style={styles.mainAvatarText}>{user.name.charAt(0).toUpperCase()}</Text></View><View style={styles.onlineDot} /></Pressable></Animated.View>
 
-        <View style={styles.welcome}>
-          <Text style={styles.eyebrow}>{family.name.toUpperCase()}</Text>
-          <Text style={styles.title}>What the crew is <Text style={styles.orange}>tackling.</Text></Text>
-          <Text style={styles.subtitle}>{quests.length ? `${quests.length} active ${quests.length === 1 ? 'quest' : 'quests'} · Pull down to refresh` : `Ready when you are, ${user.name.split(' ')[0]}.`}</Text>
-        </View>
+      <View style={styles.sectionHeading}><View><Text style={styles.eyebrow}>FAMILY MISSIONS</Text><Text style={styles.sectionTitle}>What needs attention</Text></View><View style={styles.countBadge}><Ionicons name="sparkles" size={13} color="#66500B" /><Text style={styles.countText}>{quests.length} active</Text></View></View>
+      {loading ? <ActivityIndicator style={styles.loader} color={theme.colors.orange} /> : quests.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.questRow}>{quests.map((quest, index) => <QuestCard key={quest.id} quest={quest} index={index} onPress={() => onOpenQuest(quest.id)} />)}</ScrollView> : <Pressable onPress={() => onCreateTask()} style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="sparkles" size={25} color={theme.colors.ink} /></View><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Nothing urgent right now</Text><Text style={styles.emptyText}>Create the family’s first quest</Text></View><Ionicons name="chevron-forward" size={20} color={theme.colors.muted} /></Pressable>}
 
-        <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>ACTIVE TASKS</Text><Text style={styles.sectionCount}>{String(quests.length).padStart(2, '0')}</Text></View>
-        {loading ? <ActivityIndicator style={styles.loader} color={theme.colors.orange} /> : quests.length ? quests.map(quest => <QuestCard key={quest.id} quest={quest} onPress={() => onOpenQuest(quest.id)} />) : <View style={styles.empty}><View style={styles.emptyIcon}><Text style={styles.emptyIconText}>↗</Text></View><Text style={styles.emptyTitle}>No active quests yet</Text><Text style={styles.emptyText}>Tap the plus button to turn the first family task into a team effort.</Text></View>}
+      <View style={styles.familyHeader}><Text style={styles.sectionTitle}>Your family crew</Text><Text style={styles.familyCount}>{family.members.length} members</Text></View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.familyRow}>{family.members.map((member, index) => <FamilyBubble key={member.id} member={member} index={index} current={member.id === user.id} />)}</ScrollView>
 
-        <View style={[styles.sectionHeading, styles.badgeHeading]}><Text style={styles.sectionTitle}>YOUR BADGES</Text><Text style={styles.sectionHint}>More soon</Text></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeRow}>
-          {badges.map(badge => <BadgeCard key={badge.id} badge={badge} />)}
-        </ScrollView>
-        <View style={styles.bottomSpace} />
-      </ScrollView>
-      <Pressable accessibilityRole="button" accessibilityLabel="Create a new task" onPress={onCreateTask} style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}>
-        <Text style={styles.fabText}>＋</Text>
-      </Pressable>
-    </SafeAreaView>
-  );
+      <View style={styles.familyHeader}><Text style={styles.sectionTitle}>Your badges</Text><Text style={styles.familyCount}>Keep helping ›</Text></View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeRow}>{badges.map((badge, index) => <BadgeCard key={badge.id} badge={badge} index={index} />)}</ScrollView>
+
+      <View style={styles.roomHeader}><View><Text style={styles.eyebrow}>YOUR HOME</Text><Text style={styles.sectionTitle}>Tap into family life</Text></View><Pressable onPress={() => Share.share({ message: `Join ${family.name} on SMAC with family code ${family.joinCode}` })} style={styles.roomCode}><Text style={styles.roomCodeText}>{family.joinCode}</Text><Ionicons name="share-outline" size={13} color={theme.colors.ink} /></Pressable></View>
+      <RoomMenu onSelect={onCreateTask} />
+      <View style={styles.bottomSpace} />
+    </ScrollView>
+    <BottomNav />
+    <Pressable onPress={() => onCreateTask()} accessibilityLabel="Create a task" style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}><Ionicons name="add" size={37} color={theme.colors.ink} /></Pressable>
+    <ProfileMenu visible={profileOpen} settings={showSettings} user={user} family={family} onClose={() => setProfileOpen(false)} onSettings={() => setShowSettings(true)} onBack={() => setShowSettings(false)} onLogout={() => Alert.alert('Log out?', 'You can sign back in with your email and password.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Log out', style: 'destructive', onPress: async () => { setProfileOpen(false); await onLogout(); } }])} />
+  </SafeAreaView>;
 }
 
-function Avatar({ member, index = 0, small = false }: { member: FamilyMember; index?: number; small?: boolean }) {
-  return <View style={[styles.avatar, small && styles.avatarSmall, { backgroundColor: avatarColors[index % avatarColors.length] }]}><Text style={[styles.avatarText, small && styles.avatarTextSmall]}>{member.name.charAt(0).toUpperCase()}</Text></View>;
+function QuestCard({ quest, index, onPress }: { quest: ActiveQuest; index: number; onPress: () => void }) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.spring(entrance, { toValue: 1, delay: index * 90, friction: 7, tension: 55, useNativeDriver: true }).start(); }, [entrance, index]);
+  const look = categoryLooks[quest.category];
+  return <Animated.View style={{ opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}><Pressable onPress={onPress} style={({ pressed }) => [styles.questCard, { backgroundColor: look.color }, pressed && styles.pressed]}><View style={styles.questTop}><View><View style={styles.questNumber}><Text style={styles.questNumberText}>{index + 1}</Text></View><View style={styles.categoryPill}><Text style={styles.categoryText}>{look.label}</Text></View></View><View style={styles.questIcon}><Ionicons name={look.icon} size={29} color={theme.colors.ink} /></View></View><Text numberOfLines={2} style={styles.questTitle}>{quest.title}</Text><Text numberOfLines={2} style={styles.questSummary}>{quest.summary || `${quest.totalEstimatedMinutes} minute family mission`}</Text><View style={styles.creatorRow}><MiniAvatar member={quest.creator} color={theme.colors.ink} /><Text numberOfLines={1} style={styles.creatorName}>{quest.creator.name}</Text>{quest.contributors.slice(0, 3).map(member => <View key={member.id} style={styles.contributorOverlap}><MiniAvatar member={member} color={theme.colors.ink} tiny /></View>)}</View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${quest.progress}%` }]} /></View><Text style={styles.progressText}>{quest.completedSubtasks}/{quest.totalSubtasks} done · {quest.progress}%</Text></Pressable></Animated.View>;
 }
 
-function QuestCard({ quest, onPress }: { quest: ActiveQuest; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${quest.title}`}>
-    <OffsetCard style={styles.questCardWrap} contentStyle={styles.questCard} radius={20}>
-      <View style={styles.questTop}><View style={styles.activePill}><View style={styles.activeDot} /><Text style={styles.activeText}>ACTIVE</Text></View><Text style={styles.minutes}>{quest.totalEstimatedMinutes} MIN</Text></View>
-      <Text style={styles.questTitle}>{quest.title}</Text>
-      {!!quest.summary && <Text numberOfLines={2} style={styles.questSummary}>{quest.summary}</Text>}
-      <View style={styles.peopleRow}>
-        <View style={styles.personBlock}><Text style={styles.metaLabel}>CREATED BY</Text><View style={styles.person}><Avatar member={quest.creator} /><Text numberOfLines={1} style={styles.personName}>{quest.creator.name}</Text></View></View>
-        <View style={styles.contributorBlock}><Text style={styles.metaLabel}>CONTRIBUTORS</Text>{quest.contributors.length ? <View style={styles.avatarStack}>{quest.contributors.slice(0, 4).map((member, index) => <View key={member.id} style={index ? styles.avatarOverlap : undefined}><Avatar member={member} index={index + 1} small /></View>)}{quest.contributors.length > 4 && <Text style={styles.more}>+{quest.contributors.length - 4}</Text>}</View> : <Text style={styles.openText}>Open to join</Text>}</View>
-      </View>
-      <View style={styles.progressCopy}><Text style={styles.progressLabel}>PROGRESS</Text><Text style={styles.progressValue}>{quest.completedSubtasks}/{quest.totalSubtasks} · {quest.progress}%</Text></View>
-      <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${quest.progress}%` }]} /></View>
-    </OffsetCard>
-    </Pressable>
-  );
+function MiniAvatar({ member, color, tiny }: { member: FamilyMember; color: string; tiny?: boolean }) { return <View style={[styles.miniAvatar, tiny && styles.tinyAvatar, { borderColor: color }]}><Text style={[styles.miniAvatarText, tiny && styles.tinyText]}>{member.name.charAt(0).toUpperCase()}</Text></View>; }
+function FamilyBubble({ member, index, current }: { member: FamilyMember; index: number; current: boolean }) { const color = accents[index % accents.length]; return <View style={styles.person}><View style={[styles.profileRing, { borderColor: color }]}><View style={[styles.profileFill, { backgroundColor: `${color}66` }]}><Text style={styles.profileLetter}>{member.name.charAt(0).toUpperCase()}</Text></View><View style={[styles.statusDot, { backgroundColor: current ? theme.colors.success : color }]}><Ionicons name={current ? 'home' : 'person'} size={11} color="white" /></View><View style={styles.capabilityStack}>{member.roles.includes('driver') && <Capability icon="car" />}{member.roles.includes('cook') && <Capability icon="chef-hat" />}</View></View><Text style={styles.personName}>{member.name.split(' ')[0]}</Text></View>; }
+function Capability({ icon }: { icon: 'car' | 'chef-hat' }) { return <View style={styles.capability}><MaterialCommunityIcons name={icon} size={12} color="#3C3311" /></View>; }
+function BadgeCard({ badge, index }: { badge: EarnedBadge; index: number }) { const look = badgeLooks[index % badgeLooks.length]; return <View style={[styles.badgeCard, { backgroundColor: badge.earned ? look.background : look.soft, borderColor: look.border }, !badge.earned && styles.badgeLocked]}><View style={[styles.badgeIcon, { backgroundColor: look.icon }]}><Text style={styles.badgeSymbol}>{badge.icon}</Text></View><Text style={styles.badgeTitle}>{badge.title}</Text><Text style={styles.badgeProgress}>{badge.earned ? 'EARNED' : `${badge.progress}/${badge.target} TO UNLOCK`}</Text></View>; }
+const roomActions = {
+  food: { category: 'food' as const, label: 'Food', icon: 'restaurant' as const, color: theme.colors.lime, prompt: 'Plan a family food, cooking, or grocery task: ' },
+  family: { category: 'family' as const, label: 'Family', icon: 'people' as const, color: theme.colors.lavender, prompt: 'Plan a family activity or care task: ' },
+  clean: { category: 'clean' as const, label: 'Clean', icon: 'sparkles' as const, color: theme.colors.mint, prompt: 'Plan a household cleaning task: ' },
+  route: { category: 'route' as const, label: 'Route', icon: 'car' as const, color: theme.colors.peach, prompt: 'Plan a transport, pickup, or errand task: ' },
+};
+function RoomMenu({ onSelect }: { onSelect: (prompt: string, category: QuestCategory) => void }) {
+  const [fridgeOpen, setFridgeOpen] = useState(false);
+  const selectFood = (prompt: string, category: QuestCategory) => { setFridgeOpen(true); setTimeout(() => { setFridgeOpen(false); onSelect(prompt, category); }, 180); };
+  return <View style={styles.roomContainer}><ImageBackground source={require('../assets/room_background.jpg')} resizeMode="cover" style={styles.roomImage} imageStyle={styles.roomImageRadius}><View pointerEvents="none" style={styles.roomTint} /><View pointerEvents="none" style={styles.picturePosition}><Image source={require('../assets/picture.png')} resizeMode="contain" style={styles.pictureAsset} /></View><View pointerEvents="none" style={styles.fridgePosition}><Image source={fridgeOpen ? require('../assets/fridge_open.png') : require('../assets/fridge.png')} resizeMode="contain" style={styles.fridgeAsset} /></View><View pointerEvents="none" style={styles.tablePosition}><Image source={require('../assets/table.png')} resizeMode="contain" style={styles.tableAsset} /></View><View pointerEvents="none" style={styles.doorPosition}><Image source={require('../assets/door.png')} resizeMode="contain" style={styles.doorAsset} /></View><Text pointerEvents="none" style={styles.roomHint}>Tap an area to start a quest</Text><RoomHotspot action={roomActions.food} style={styles.fridgeHitbox} onSelect={selectFood} /><RoomHotspot action={roomActions.family} style={styles.pictureHitbox} onSelect={onSelect} /><RoomHotspot action={roomActions.clean} style={styles.tableHitbox} onSelect={onSelect} /><RoomHotspot action={roomActions.route} style={styles.doorHitbox} onSelect={onSelect} /></ImageBackground></View>;
 }
-
-function BadgeCard({ badge }: { badge: EarnedBadge }) {
-  return <View style={[styles.badgeCard, !badge.earned && styles.badgeLocked]}><View style={[styles.badgeIcon, badge.earned && styles.badgeIconEarned]}><Text style={styles.badgeIconText}>{badge.icon}</Text></View><Text style={styles.badgeTitle}>{badge.title}</Text><Text style={styles.badgeDescription}>{badge.description}</Text><Text style={styles.badgeProgress}>{badge.earned ? 'EARNED' : `${badge.progress}/${badge.target}`}</Text></View>;
+function RoomHotspot({ action, style, onSelect }: { action: (typeof roomActions)[keyof typeof roomActions]; style: object; onSelect: (prompt: string, category: QuestCategory) => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const animate = (toValue: number) => Animated.spring(scale, { toValue, friction: 5, useNativeDriver: true }).start();
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${action.label} tasks`} onPress={() => onSelect(action.prompt, action.category)} onPressIn={() => animate(.94)} onPressOut={() => animate(1)} style={[styles.roomHitbox, style]}><Animated.View style={[styles.roomLabel, { backgroundColor: action.color, transform: [{ scale }] }]}><Ionicons name={action.icon} size={14} color={theme.colors.ink} /><Text style={styles.roomLabelText}>{action.label}</Text></Animated.View></Pressable>;
 }
+function ProfileMenu({ visible, settings, user, family, onClose, onSettings, onBack, onLogout }: { visible: boolean; settings: boolean; user: User; family: Family; onClose: () => void; onSettings: () => void; onBack: () => void; onLogout: () => void }) {
+  const shareCode = () => Share.share({ message: `Join ${family.name} on SMAC with family code ${family.joinCode}` });
+  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}><View style={styles.modalRoot}><Pressable accessibilityLabel="Close profile menu" style={styles.modalBackdrop} onPress={onClose} /><SafeAreaView style={styles.profileSheet} edges={['bottom']}>
+    <View style={styles.sheetHandle} />
+    {settings ? <><View style={styles.sheetTitleRow}><Pressable onPress={onBack} style={styles.sheetBack}><Ionicons name="chevron-back" size={20} color={theme.colors.ink} /></Pressable><Text style={styles.sheetTitle}>Profile settings</Text><View style={styles.sheetBack} /></View><View style={styles.settingsAvatar}><Text style={styles.settingsAvatarText}>{user.name.charAt(0).toUpperCase()}</Text></View><InfoRow label="NAME" value={user.name} /><InfoRow label="EMAIL" value={user.email} /><InfoRow label="AGE" value={String(user.age)} /><InfoRow label="CAPABILITIES" value={user.roles.map(role => role.charAt(0).toUpperCase() + role.slice(1)).join(' · ')} /><Text style={styles.settingsNote}>Profile editing will be added later. These details currently control which family tasks you can claim.</Text></> : <><View style={styles.profileIdentity}><View style={styles.sheetAvatar}><Text style={styles.sheetAvatarText}>{user.name.charAt(0).toUpperCase()}</Text></View><View style={styles.profileCopy}><Text style={styles.profileName}>{user.name}</Text><Text style={styles.profileMeta}>{family.name} · {family.membershipRole}</Text></View><Pressable onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={21} color={theme.colors.muted} /></Pressable></View><Pressable onPress={shareCode} style={styles.joinCodeCard}><View><Text style={styles.joinCodeLabel}>FAMILY JOIN CODE</Text><Text style={styles.joinCodeValue}>{family.joinCode}</Text></View><View style={styles.shareCircle}><Ionicons name="share-outline" size={18} color={theme.colors.ink} /></View></Pressable><Pressable onPress={onSettings} style={styles.menuRow}><View style={[styles.menuIcon, { backgroundColor: '#DDEBFA' }]}><Ionicons name="settings-outline" size={20} color={theme.colors.ink} /></View><Text style={styles.menuText}>Settings</Text><Ionicons name="chevron-forward" size={19} color={theme.colors.muted} /></Pressable><Pressable onPress={onLogout} style={styles.menuRow}><View style={[styles.menuIcon, { backgroundColor: '#FCE0DC' }]}><Ionicons name="log-out-outline" size={20} color={theme.colors.error} /></View><Text style={[styles.menuText, { color: theme.colors.error }]}>Log out</Text><Ionicons name="chevron-forward" size={19} color={theme.colors.muted} /></Pressable></>}
+  </SafeAreaView></View></Modal>;
+}
+function InfoRow({ label, value }: { label: string; value: string }) { return <View style={styles.infoRow}><Text style={styles.infoLabel}>{label}</Text><Text style={styles.infoValue}>{value}</Text></View>; }
+function BottomNav() { return <View style={styles.bottomNav}><View style={styles.navItem}><Ionicons name="person-circle-outline" size={27} color="#999" /></View><View style={styles.navItem}><Ionicons name="home" size={25} color={theme.colors.ink} /><View style={styles.activeDot} /></View><View style={styles.navItem}><Ionicons name="list" size={25} color="#999" /></View><View style={styles.navItem}><Ionicons name="settings-outline" size={25} color="#999" /></View></View>; }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: theme.colors.paper },
-  page: { width: '100%', maxWidth: 620, alignSelf: 'center', paddingHorizontal: 18, paddingBottom: 32 },
-  topbar: { minHeight: 62, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  logo: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.colors.ink, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] },
-  logoText: { color: theme.colors.lime, fontSize: 17, fontWeight: '900' },
-  brand: { color: theme.colors.ink, fontSize: 17, fontWeight: '900', letterSpacing: 1.5 },
-  logout: { color: theme.colors.ink, fontSize: 12, fontWeight: '800' },
-  welcome: { paddingTop: 35, paddingBottom: 31 },
-  eyebrow: { alignSelf: 'flex-start', borderWidth: 1, borderColor: theme.colors.ink, borderRadius: 99, paddingHorizontal: 11, paddingVertical: 6, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  title: { marginTop: 17, color: theme.colors.ink, fontSize: 41, lineHeight: 43, fontWeight: '900', letterSpacing: -2 },
-  orange: { color: theme.colors.orange },
-  subtitle: { marginTop: 10, color: theme.colors.muted, fontSize: 14 },
-  sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { color: theme.colors.ink, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
-  sectionCount: { color: theme.colors.muted, fontSize: 11, fontWeight: '900' },
-  sectionHint: { color: theme.colors.muted, fontSize: 10, fontWeight: '700' },
-  loader: { marginVertical: 50 },
-  empty: { alignItems: 'center', paddingHorizontal: 30, paddingVertical: 40, borderWidth: 1, borderStyle: 'dashed', borderColor: theme.colors.border, borderRadius: theme.radius.lg },
-  emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme.colors.lime, alignItems: 'center', justifyContent: 'center' },
-  emptyIconText: { fontSize: 22, color: theme.colors.ink },
-  emptyTitle: { marginTop: 15, fontSize: 18, fontWeight: '900', color: theme.colors.ink },
-  emptyText: { marginTop: 6, color: theme.colors.muted, textAlign: 'center', lineHeight: 20 },
-  questCardWrap: { marginBottom: 14 },
-  questCard: { borderWidth: 1.5, borderColor: theme.colors.ink, borderRadius: 20, padding: 18, backgroundColor: theme.colors.white },
-  questTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  activePill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.lime, borderRadius: 99, paddingHorizontal: 9, paddingVertical: 5 },
-  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.ink },
-  activeText: { fontSize: 8, fontWeight: '900', letterSpacing: .8 },
-  minutes: { color: theme.colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: .8 },
-  questTitle: { marginTop: 15, color: theme.colors.ink, fontSize: 24, lineHeight: 28, fontWeight: '900', letterSpacing: -.8 },
-  questSummary: { marginTop: 6, color: theme.colors.muted, fontSize: 13, lineHeight: 19 },
-  peopleRow: { flexDirection: 'row', gap: 18, marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border },
-  personBlock: { flex: 1 },
-  contributorBlock: { flex: 1, alignItems: 'flex-end' },
-  metaLabel: { color: theme.colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: .9, marginBottom: 7 },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  personName: { flex: 1, color: theme.colors.ink, fontSize: 11, fontWeight: '800' },
-  avatar: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.colors.paper },
-  avatarSmall: { width: 28, height: 28, borderRadius: 14 },
-  avatarText: { color: theme.colors.ink, fontSize: 12, fontWeight: '900' },
-  avatarTextSmall: { fontSize: 10 },
-  avatarStack: { flexDirection: 'row', alignItems: 'center' },
-  avatarOverlap: { marginLeft: -8 },
-  more: { marginLeft: 5, color: theme.colors.muted, fontSize: 10, fontWeight: '800' },
-  openText: { color: theme.colors.muted, fontSize: 11, fontStyle: 'italic' },
-  progressCopy: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18, marginBottom: 7 },
-  progressLabel: { color: theme.colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: .9 },
-  progressValue: { color: theme.colors.ink, fontSize: 9, fontWeight: '900' },
-  progressTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(21,40,32,.11)', overflow: 'hidden' },
-  progressFill: { height: '100%', minWidth: 3, borderRadius: 4, backgroundColor: theme.colors.orange },
-  badgeHeading: { marginTop: 35 },
-  badgeRow: { gap: 10, paddingRight: 18, paddingBottom: 8 },
-  badgeCard: { width: 142, minHeight: 155, borderWidth: 1, borderColor: theme.colors.ink, borderRadius: 17, padding: 14, backgroundColor: theme.colors.lime },
-  badgeLocked: { backgroundColor: 'rgba(255,255,255,.4)', borderColor: theme.colors.border },
-  badgeIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(21,40,32,.1)', alignItems: 'center', justifyContent: 'center' },
-  badgeIconEarned: { backgroundColor: theme.colors.ink },
-  badgeIconText: { color: theme.colors.orange, fontSize: 18, fontWeight: '900' },
-  badgeTitle: { marginTop: 12, color: theme.colors.ink, fontSize: 13, fontWeight: '900' },
-  badgeDescription: { marginTop: 3, color: theme.colors.muted, fontSize: 10, lineHeight: 14 },
-  badgeProgress: { marginTop: 'auto', color: theme.colors.ink, fontSize: 9, fontWeight: '900', letterSpacing: .8 },
-  bottomSpace: { height: 88 },
-  fab: { position: 'absolute', right: 22, bottom: 20, width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.ink, borderWidth: 3, borderColor: theme.colors.lime, shadowColor: '#000', shadowOpacity: .24, shadowOffset: { width: 0, height: 7 }, shadowRadius: 12, elevation: 9 },
-  fabPressed: { transform: [{ scale: .95 }] },
-  fabText: { color: theme.colors.lime, fontSize: 34, lineHeight: 38, fontWeight: '400' },
+  safe: { flex: 1, backgroundColor: theme.colors.paper }, page: { paddingHorizontal: 18, paddingTop: 8 }, header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }, greetingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }, dashboardLogo: { width: 67, height: 20 }, greeting: { color: theme.colors.muted, fontSize: 12, fontWeight: '600' }, hello: { color: theme.colors.ink, fontSize: 32, lineHeight: 37, fontWeight: '800', letterSpacing: -1.1 }, mainAvatarRing: { width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: theme.colors.mint, padding: 3, backgroundColor: theme.colors.white }, mainAvatar: { flex: 1, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DDF1EB' }, mainAvatarText: { color: theme.colors.ink, fontSize: 23, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: theme.colors.success, borderWidth: 3, borderColor: theme.colors.paper, right: -1, bottom: 2 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 13 }, eyebrow: { color: theme.colors.orange, fontSize: 10, letterSpacing: 1.8, fontWeight: '900', marginBottom: 3 }, sectionTitle: { color: theme.colors.ink, fontSize: 19, fontWeight: '900', letterSpacing: -.35 }, countBadge: { flexDirection: 'row', gap: 4, alignItems: 'center', backgroundColor: '#F8E7A4', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 }, countText: { color: '#6C5712', fontSize: 11, fontWeight: '800' }, loader: { height: 210 }, questRow: { gap: 14, paddingRight: 18, paddingBottom: 12 }, questCard: { width: 232, minHeight: 228, padding: 17, borderRadius: 27, borderWidth: 1, borderColor: 'rgba(16,42,33,.08)', shadowColor: '#102A21', shadowOpacity: .09, shadowRadius: 13, shadowOffset: { width: 0, height: 7 }, elevation: 3 }, pressed: { opacity: .78, transform: [{ scale: .98 }] }, questTop: { flexDirection: 'row', justifyContent: 'space-between', minHeight: 55 }, questNumber: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.78)' }, questNumberText: { color: theme.colors.ink, fontSize: 13, fontWeight: '900' }, categoryPill: { alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9, backgroundColor: 'rgba(255,255,255,.58)' }, categoryText: { color: theme.colors.ink, fontSize: 8, fontWeight: '900', letterSpacing: .5, textTransform: 'uppercase' }, questIcon: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.68)', borderWidth: 1, borderColor: 'rgba(255,255,255,.8)' }, questTitle: { marginTop: 9, minHeight: 48, color: theme.colors.ink, fontSize: 21, lineHeight: 24, fontWeight: '900', letterSpacing: -.35 }, questSummary: { minHeight: 32, marginTop: 5, color: 'rgba(16,42,33,.64)', fontSize: 11, lineHeight: 15, fontWeight: '600' }, creatorRow: { flexDirection: 'row', alignItems: 'center', marginTop: 11 }, miniAvatar: { width: 27, height: 27, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.white }, tinyAvatar: { width: 24, height: 24 }, miniAvatarText: { color: theme.colors.ink, fontSize: 10, fontWeight: '900' }, tinyText: { fontSize: 8 }, creatorName: { flex: 1, marginLeft: 6, color: 'rgba(16,42,33,.68)', fontSize: 10, fontWeight: '800' }, contributorOverlap: { marginLeft: -8 }, progressTrack: { height: 7, marginTop: 12, borderRadius: 4, backgroundColor: 'rgba(255,255,255,.62)', overflow: 'hidden' }, progressFill: { height: '100%', minWidth: 2, borderRadius: 4, backgroundColor: theme.colors.ink }, progressText: { marginTop: 5, color: 'rgba(16,42,33,.68)', fontSize: 10, fontWeight: '700' },
+  empty: { minHeight: 94, padding: 13, flexDirection: 'row', alignItems: 'center', borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.white }, emptyIcon: { width: 51, height: 51, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF3BF' }, emptyCopy: { flex: 1, marginLeft: 12 }, emptyTitle: { color: theme.colors.ink, fontSize: 14, fontWeight: '800' }, emptyText: { marginTop: 3, color: theme.colors.muted, fontSize: 11 }, familyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 23, marginBottom: 12 }, familyCount: { color: theme.colors.muted, fontSize: 11, fontWeight: '700' }, familyRow: { gap: 19, paddingRight: 18, paddingBottom: 4 }, person: { width: 78, alignItems: 'center' }, profileRing: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, padding: 3, backgroundColor: theme.colors.white }, profileFill: { flex: 1, borderRadius: 29, alignItems: 'center', justifyContent: 'center' }, profileLetter: { color: theme.colors.ink, fontSize: 24, fontWeight: '900' }, statusDot: { position: 'absolute', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', bottom: -4, left: -3, borderWidth: 2.5, borderColor: theme.colors.paper }, capabilityStack: { position: 'absolute', right: -8, bottom: -3, flexDirection: 'row', gap: 1 }, capability: { width: 21, height: 21, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.lime, borderWidth: 2, borderColor: theme.colors.paper }, personName: { marginTop: 8, color: theme.colors.ink, fontSize: 12, fontWeight: '800' },
+  badgeRow: { gap: 11, paddingRight: 18, paddingBottom: 5 }, badgeCard: { width: 118, minHeight: 101, borderRadius: 20, padding: 12, borderWidth: 2, shadowColor: '#102A21', shadowOpacity: .1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, badgeLocked: { borderStyle: 'dashed' }, badgeIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,.7)' }, badgeSymbol: { color: theme.colors.ink, fontSize: 16, fontWeight: '900' }, badgeTitle: { marginTop: 8, color: theme.colors.ink, fontSize: 12, fontWeight: '900' }, badgeProgress: { marginTop: 3, color: 'rgba(16,42,33,.7)', fontSize: 8, fontWeight: '900', letterSpacing: .35 }, homePanel: { minHeight: 126, marginTop: 23, padding: 16, flexDirection: 'row', alignItems: 'center', borderRadius: 24, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#EFE9DD' }, homeAccent: { width: 52, height: 82, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.mint }, homeCopy: { flex: 1, marginLeft: 14 }, homeEyebrow: { color: theme.colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, homeTitle: { marginTop: 4, color: theme.colors.ink, fontSize: 17, fontWeight: '800' }, homeText: { marginTop: 4, color: theme.colors.muted, fontSize: 10, lineHeight: 15 }, codePill: { alignSelf: 'flex-start', marginTop: 9, minHeight: 29, paddingHorizontal: 10, borderRadius: 15, backgroundColor: 'rgba(255,255,255,.72)', flexDirection: 'row', alignItems: 'center', gap: 7 }, codeLabel: { color: theme.colors.muted, fontSize: 7, fontWeight: '900', letterSpacing: .7 }, codeValue: { color: theme.colors.ink, fontSize: 12, fontWeight: '900', letterSpacing: 1.5 }, bottomSpace: { height: 98 },
+  roomHeader: { marginTop: 23, marginBottom: 11, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }, roomCode: { minHeight: 30, paddingHorizontal: 10, borderRadius: 15, backgroundColor: '#FFF3BF', flexDirection: 'row', alignItems: 'center', gap: 6 }, roomCodeText: { color: theme.colors.ink, fontSize: 11, fontWeight: '900', letterSpacing: 1.3 }, roomContainer: { height: 232, overflow: 'hidden', borderRadius: 25, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#EFE9DD', shadowColor: '#000', shadowOpacity: .06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 }, roomImage: { flex: 1 }, roomImageRadius: { borderRadius: 25 }, roomTint: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(255,255,255,.06)' }, roomHint: { position: 'absolute', zIndex: 3, top: 9, left: 11, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 8, overflow: 'hidden', backgroundColor: 'rgba(250,249,246,.82)', color: 'rgba(24,24,24,.62)', fontSize: 9, fontWeight: '800' }, picturePosition: { position: 'absolute', top: 40, left: '40%' }, fridgePosition: { position: 'absolute', left: 10, bottom: 40 }, tablePosition: { position: 'absolute', left: '29%', bottom: 60 }, doorPosition: { position: 'absolute', right: 10, bottom: 57 }, fridgeAsset: { width: 100, height: 190, transform: [{ scale: 1.55 }] }, pictureAsset: { width: 80, height: 62, transform: [{ scale: 2 }] }, tableAsset: { width: 155, height: 125, transform: [{ scale: 1.6 }] }, doorAsset: { width: 92, height: 190, transform: [{ scale: 1.55 }] }, roomHitbox: { position: 'absolute', zIndex: 4, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 7 }, fridgeHitbox: { left: 0, bottom: 0, width: '25%', height: '86%' }, pictureHitbox: { left: '25%', top: 0, width: '32%', height: '46%' }, tableHitbox: { left: '25%', bottom: 0, width: '48%', height: '54%' }, doorHitbox: { right: 0, bottom: 0, width: '27%', height: '88%' }, roomLabel: { minHeight: 27, paddingHorizontal: 8, borderRadius: 14, borderWidth: 2, borderColor: theme.colors.white, flexDirection: 'row', alignItems: 'center', gap: 4, shadowColor: '#000', shadowOpacity: .12, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3 }, roomLabelText: { color: theme.colors.ink, fontSize: 9, fontWeight: '900' },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' }, modalBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(24,24,24,.34)' }, profileSheet: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 10, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: theme.colors.paper, shadowColor: '#000', shadowOpacity: .15, shadowRadius: 18, shadowOffset: { width: 0, height: -5 }, elevation: 12 }, sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 17, backgroundColor: '#D7D3CC' }, profileIdentity: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 }, sheetAvatar: { width: 58, height: 58, borderRadius: 29, borderWidth: 3, borderColor: theme.colors.mint, backgroundColor: '#DDF1EB', alignItems: 'center', justifyContent: 'center' }, sheetAvatarText: { color: theme.colors.ink, fontSize: 22, fontWeight: '900' }, profileCopy: { flex: 1, marginLeft: 12 }, profileName: { color: theme.colors.ink, fontSize: 21, fontWeight: '800' }, profileMeta: { marginTop: 2, color: theme.colors.muted, fontSize: 11, textTransform: 'capitalize' }, closeButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: theme.colors.white, alignItems: 'center', justifyContent: 'center' }, joinCodeCard: { minHeight: 78, marginBottom: 12, paddingHorizontal: 15, borderRadius: 19, backgroundColor: '#FFF3BF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, joinCodeLabel: { color: '#756019', fontSize: 8, fontWeight: '900', letterSpacing: 1 }, joinCodeValue: { marginTop: 4, color: theme.colors.ink, fontSize: 23, fontWeight: '900', letterSpacing: 4 }, shareCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,.75)', alignItems: 'center', justifyContent: 'center' }, menuRow: { minHeight: 62, marginBottom: 8, paddingHorizontal: 10, borderRadius: 17, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.white, flexDirection: 'row', alignItems: 'center' }, menuIcon: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, menuText: { flex: 1, marginLeft: 12, color: theme.colors.ink, fontSize: 14, fontWeight: '800' }, sheetTitleRow: { height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sheetBack: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, sheetTitle: { color: theme.colors.ink, fontSize: 16, fontWeight: '800' }, settingsAvatar: { alignSelf: 'center', width: 74, height: 74, marginVertical: 15, borderRadius: 37, backgroundColor: theme.colors.mint, alignItems: 'center', justifyContent: 'center' }, settingsAvatarText: { color: theme.colors.ink, fontSize: 28, fontWeight: '900' }, infoRow: { minHeight: 55, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: theme.colors.border }, infoLabel: { color: theme.colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, infoValue: { marginTop: 4, color: theme.colors.ink, fontSize: 14, fontWeight: '700' }, settingsNote: { marginTop: 13, marginBottom: 8, color: theme.colors.muted, fontSize: 10, lineHeight: 15, textAlign: 'center' },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 72, paddingLeft: 16, paddingRight: 94, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', backgroundColor: 'rgba(250,249,246,.97)', borderTopWidth: 1, borderColor: theme.colors.border }, navItem: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }, activeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: theme.colors.ink, position: 'absolute', bottom: 2 }, fab: { position: 'absolute', right: 18, bottom: 15, width: 62, height: 62, borderRadius: 31, backgroundColor: theme.colors.lime, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#C8A928', shadowColor: '#7D6819', shadowOpacity: .22, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 }, fabPressed: { transform: [{ scale: .95 }] },
 });
