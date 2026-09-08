@@ -1,19 +1,26 @@
 {
   "expo": {
-    "name": "HomeQuestApp",
-    "slug": "HomeQuestApp",
+    "name": "SMAC",
+    "slug": "smac-family-quests",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow SMAC to track an active drive task and detect arrival at its destination."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#F4F1E8"
       }
     },
     "web": {
