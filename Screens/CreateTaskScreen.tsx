@@ -11,15 +11,17 @@ import { OffsetCard } from '../components/OffsetCard';
 const skillOptions: CapabilityRole[] = ['anyone', 'cook', 'driver', 'adult'];
 const examples = ['Clean the kitchen after a big family dinner', 'Do the weekly grocery run and put everything away', 'Get ready and packed for a beach day'];
 
-export function CreateTaskScreen({ user, family, onBack, onCommitted }: {
+export function CreateTaskScreen({ user, family, initialChore = '', initialPlan = null, onBack, onCommitted }: {
   user: User;
   family: Family;
+  initialChore?: string;
+  initialPlan?: QuestPlan | null;
   onBack: () => void;
   onCommitted: () => void;
 }) {
   const db = useSQLiteContext();
-  const [chore, setChore] = useState('');
-  const [plan, setPlan] = useState<QuestPlan | null>(null);
+  const [chore, setChore] = useState(initialChore);
+  const [plan, setPlan] = useState<QuestPlan | null>(initialPlan);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');

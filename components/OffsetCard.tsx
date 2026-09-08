@@ -1,60 +1,24 @@
-import React, { type PropsWithChildren } from 'react';
-import {
-  StyleSheet,
-  View,
-  type ColorValue,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 
-type OffsetCardProps = PropsWithChildren<{
+import { theme } from '../theme';
+
+export function OffsetCard({ children, style, contentStyle, offset = 6, radius = 18, shadowColor = theme.colors.ink }: {
+  children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
-  shadowColor?: ColorValue;
   offset?: number;
   radius?: number;
-}>;
-
-export function OffsetCard({
-  children,
-  style,
-  contentStyle,
-  shadowColor = '#152820',
-  offset = 5,
-  radius = 22,
-}: OffsetCardProps) {
-  return (
-    <View style={style}>
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fill,
-          styles.shadowPlate,
-          {
-            backgroundColor: shadowColor,
-            borderRadius: radius,
-            transform: [{ translateX: offset }, { translateY: offset }],
-          },
-        ]}
-      />
-      <View style={[styles.content, { borderRadius: radius }, contentStyle]}>{children}</View>
-    </View>
-  );
+  shadowColor?: string;
+}) {
+  return <View style={[styles.wrap, { paddingBottom: offset, paddingRight: offset }, style]}>
+    <View pointerEvents="none" style={[styles.offset, { top: offset, left: offset, borderRadius: radius, backgroundColor: shadowColor }]} />
+    <View style={[{ borderRadius: radius }, contentStyle]}>{children}</View>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  shadowPlate: {
-    borderWidth: 1,
-    borderColor: '#152820',
-  },
-  content: {
-    backgroundColor: '#FFFFFF',
-  },
+  wrap: { position: 'relative' },
+  offset: { ...StyleSheet.absoluteFill },
 });

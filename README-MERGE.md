@@ -21,7 +21,7 @@ The screen code deliberately uses literal relative `require()` paths so Expo Met
 
 ## Environment
 
-Retain the existing backend variables:
+Copy `.env.example` to `.env`, then configure the backend variables:
 
 - `EXPO_PUBLIC_GEMINI_API_KEY`
 - `EXPO_PUBLIC_GEMINI_MODEL` (optional; defaults to `gemini-2.5-flash`)

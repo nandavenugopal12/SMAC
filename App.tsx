@@ -14,7 +14,7 @@ import PlanningScreen from './Screens/PlanningScreen';
 import { QuestDetailScreen } from './Screens/QuestDetailScreen';
 import TransportScreen from './Screens/TransportScreen';
 import { getCurrentUser, getFamilyForUser, initializeDatabase, logout } from './services/database';
-import type { Family, QuestSubtask, User } from './types';
+import type { Family, QuestPlan, QuestSubtask, User } from './types';
 import { theme } from './theme';
 
 type Screen =
@@ -47,6 +47,7 @@ function HomeQuestApp() {
   const [family, setFamily] = useState<Family | null>(null);
   const [questId, setQuestId] = useState<number | null>(null);
   const [drive, setDrive] = useState<DriveContext | null>(null);
+  const [taskDraft, setTaskDraft] = useState<{ chore: string; plan: QuestPlan } | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const refreshSession = useCallback(async () => {
@@ -80,6 +81,14 @@ function HomeQuestApp() {
     setDrive({ task, acceptedAt });
     setScreen('driveTask');
   };
+  const createTask = () => {
+    setTaskDraft(null);
+    setScreen('createTask');
+  };
+  const reviewGeneratedPlan = (chore: string, plan: QuestPlan) => {
+    setTaskDraft({ chore, plan });
+    setScreen('createTask');
+  };
 
   if (screen === 'login') return <LoginScreen onAuthenticated={refreshSession} />;
   if (!user) return <View style={styles.loading}><ActivityIndicator color={theme.colors.orange} /></View>;
@@ -89,18 +98,21 @@ function HomeQuestApp() {
   if (screen === 'transport') return <TransportScreen onBack={() => setScreen('home')} />;
   if (screen === 'planning') return <PlanningScreen onBack={() => setScreen('home')} />;
   if (screen === 'cleanliness') return <CleanlinessScreen onBack={() => setScreen('home')} />;
-  if (screen === 'createTask') return <CreateTaskScreen user={user} family={family} onBack={() => setScreen('home')} onCommitted={() => { changed(); setScreen('dashboard'); }} />;
-  if (screen === 'dashboard') return <DashboardScreen user={user} family={family} refreshToken={refreshToken} onCreateTask={() => setScreen('createTask')} onOpenQuest={openQuest} onLogout={signOut} />;
+  if (screen === 'createTask') return <CreateTaskScreen user={user} family={family} initialChore={taskDraft?.chore} initialPlan={taskDraft?.plan} onBack={() => setScreen('home')} onCommitted={() => { setTaskDraft(null); changed(); setScreen('dashboard'); }} />;
+  if (screen === 'dashboard') return <DashboardScreen user={user} family={family} refreshToken={refreshToken} onCreateTask={createTask} onOpenQuest={openQuest} onLogout={signOut} />;
   if (screen === 'questDetail' && questId !== null) return <QuestDetailScreen questId={questId} user={user} family={family} onBack={() => setScreen('dashboard')} onChanged={changed} onStartDrive={startDrive} />;
   if (screen === 'driveTask' && drive) return <DriveTaskScreen task={drive.task} acceptedAt={drive.acceptedAt} user={user} onBack={() => setScreen('questDetail')} onCompleted={() => { changed(); setDrive(null); setScreen('questDetail'); }} />;
 
   return <Homepage
+    userName={user.name}
+    familyName={family.name}
     onNavigateToFood={() => setScreen('food')}
     onNavigateToTransport={() => setScreen('transport')}
     onNavigateToPlanning={() => setScreen('planning')}
     onNavigateToCleanliness={() => setScreen('cleanliness')}
     onNavigateToPlans={() => setScreen('planning')}
-    onCreateTask={() => setScreen('createTask')}
+    onCreateTask={createTask}
+    onPlanGenerated={reviewGeneratedPlan}
     onOpenTasks={() => setScreen('dashboard')}
   />;
 }

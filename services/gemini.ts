@@ -54,13 +54,15 @@ export async function breakDownChore(chore: string): Promise<QuestPlan> {
   if (!response.ok) throw new Error(payload?.error?.message || 'Gemini could not create a quest.');
   const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini returned an empty response.');
-  const plan = JSON.parse(text) as GeneratedPlanPayload;
+  let plan: GeneratedPlanPayload;
+  try { plan = JSON.parse(text) as GeneratedPlanPayload; }
+  catch { throw new Error('Gemini returned a response the app could not read. Try generating again.'); }
   if (!Array.isArray(plan.tasks)) throw new Error('Gemini returned an invalid task list.');
   const validRoles: CapabilityRole[] = ['anyone', 'adult', 'cook', 'driver'];
   return {
-    questTitle: String(plan.questTitle), summary: String(plan.summary), totalEstimatedMinutes: Math.max(1, Number(plan.totalEstimatedMinutes)),
+    questTitle: String(plan.questTitle || chore.trim()), summary: String(plan.summary || ''), totalEstimatedMinutes: Math.max(1, Number(plan.totalEstimatedMinutes) || 1),
     tasks: plan.tasks.slice(0, 8).map((task, index) => ({
-      id: index + 1, title: String(task.title), description: String(task.description), estimatedMinutes: Math.max(1, Number(task.estimatedMinutes)),
+      id: index + 1, title: String(task.title || `Subtask ${index + 1}`), description: String(task.description || ''), estimatedMinutes: Math.max(1, Number(task.estimatedMinutes) || 1),
       skill: typeof task.skill === 'string' && validRoles.includes(task.skill as CapabilityRole) ? task.skill as CapabilityRole : 'anyone', doTogether: Boolean(task.doTogether), destination: String(task.destination || ''),
     })),
   };

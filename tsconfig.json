@@ -7,5 +7,14 @@
     "noEmit": true
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "webpack.config.js"]
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "webpack.config.js",
+    "Components/**",
+    "components/Button.tsx",
+    "components/Card.tsx",
+    "Screens/HomeScreen.tsx"
+  ]
 }
