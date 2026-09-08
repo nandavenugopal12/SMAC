@@ -114,6 +114,17 @@ export async function login(db: SQLiteDatabase, email: string, password: string)
   return toUser(row);
 }
 
+export async function updateUserProfile(db: SQLiteDatabase, userId: number, input: { name: string; age: number; roles: CapabilityRole[] }) {
+  const name = input.name.trim();
+  if (name.length < 2 || name.length > 60) fail('Name must be between 2 and 60 characters.');
+  if (!Number.isInteger(input.age) || input.age < 5 || input.age > 120) fail('Age must be between 5 and 120.');
+  const roles = [...new Set(input.roles.filter(role => role === 'cook' || role === 'driver'))];
+  if (roles.includes('driver') && input.age < 16) fail('Drivers must be at least 16 years old.');
+  const result = await db.runAsync('UPDATE users SET name=?,age=?,roles=? WHERE id=?', name, input.age, JSON.stringify(roles), userId);
+  if (!result.changes) fail('Profile could not be found.');
+  return getUserById(db, userId);
+}
+
 async function setSession(db: SQLiteDatabase, userId: number) { await db.runAsync('INSERT OR REPLACE INTO active_session(id,user_id) VALUES(1,?)', userId); }
 export async function logout(db: SQLiteDatabase) { await db.runAsync('DELETE FROM active_session'); }
 export async function getCurrentUser(db: SQLiteDatabase) {

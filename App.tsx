@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 
@@ -11,6 +11,7 @@ import FoodScreen from './Screens/FoodScreen';
 import Homepage from './Screens/Homepage';
 import { LoginScreen } from './Screens/LoginScreen';
 import PlanningScreen from './Screens/PlanningScreen';
+import { ProfileScreen } from './Screens/ProfileScreen';
 import { QuestDetailScreen } from './Screens/QuestDetailScreen';
 import TransportScreen from './Screens/TransportScreen';
 import { getCurrentUser, getFamilyForUser, initializeDatabase, logout } from './services/database';
@@ -26,6 +27,7 @@ type Screen =
   | 'transport'
   | 'planning'
   | 'cleanliness'
+  | 'profile'
   | 'createTask'
   | 'questDetail'
   | 'driveTask';
@@ -49,6 +51,7 @@ function HomeQuestApp() {
   const [drive, setDrive] = useState<DriveContext | null>(null);
   const [taskDraft, setTaskDraft] = useState<{ chore: string; plan: QuestPlan } | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [booting, setBooting] = useState(true);
 
   const refreshSession = useCallback(async () => {
     const nextUser = await getCurrentUser(db);
@@ -62,6 +65,10 @@ function HomeQuestApp() {
     setFamily(nextFamily);
     setScreen(nextFamily ? 'home' : 'family');
   }, [db]);
+
+  useEffect(() => {
+    refreshSession().catch(() => { setUser(null); setFamily(null); setScreen('login'); }).finally(() => setBooting(false));
+  }, [refreshSession]);
 
   const signOut = useCallback(async () => {
     await logout(db);
@@ -81,15 +88,12 @@ function HomeQuestApp() {
     setDrive({ task, acceptedAt });
     setScreen('driveTask');
   };
-  const createTask = () => {
-    setTaskDraft(null);
-    setScreen('createTask');
-  };
   const reviewGeneratedPlan = (chore: string, plan: QuestPlan) => {
     setTaskDraft({ chore, plan });
     setScreen('createTask');
   };
 
+  if (booting) return <View style={styles.loading}><ActivityIndicator color={theme.colors.orange} /></View>;
   if (screen === 'login') return <LoginScreen onAuthenticated={refreshSession} />;
   if (!user) return <View style={styles.loading}><ActivityIndicator color={theme.colors.orange} /></View>;
   if (screen === 'family' || !family) return <FamilyScreen user={user} onFamilyReady={refreshSession} onLogout={signOut} />;
@@ -98,8 +102,9 @@ function HomeQuestApp() {
   if (screen === 'transport') return <TransportScreen onBack={() => setScreen('home')} />;
   if (screen === 'planning') return <PlanningScreen onBack={() => setScreen('home')} />;
   if (screen === 'cleanliness') return <CleanlinessScreen onBack={() => setScreen('home')} />;
+  if (screen === 'profile') return <ProfileScreen user={user} family={family} onBack={() => setScreen('home')} onSaved={refreshSession} />;
   if (screen === 'createTask') return <CreateTaskScreen user={user} family={family} initialChore={taskDraft?.chore} initialPlan={taskDraft?.plan} onBack={() => setScreen('home')} onCommitted={() => { setTaskDraft(null); changed(); setScreen('dashboard'); }} />;
-  if (screen === 'dashboard') return <DashboardScreen user={user} family={family} refreshToken={refreshToken} onCreateTask={createTask} onOpenQuest={openQuest} onLogout={signOut} />;
+  if (screen === 'dashboard') return <DashboardScreen user={user} family={family} refreshToken={refreshToken} onHome={() => setScreen('home')} onOpenQuest={openQuest} onLogout={signOut} />;
   if (screen === 'questDetail' && questId !== null) return <QuestDetailScreen questId={questId} user={user} family={family} onBack={() => setScreen('dashboard')} onChanged={changed} onStartDrive={startDrive} />;
   if (screen === 'driveTask' && drive) return <DriveTaskScreen task={drive.task} acceptedAt={drive.acceptedAt} user={user} onBack={() => setScreen('questDetail')} onCompleted={() => { changed(); setDrive(null); setScreen('questDetail'); }} />;
 
@@ -111,9 +116,9 @@ function HomeQuestApp() {
     onNavigateToPlanning={() => setScreen('planning')}
     onNavigateToCleanliness={() => setScreen('cleanliness')}
     onNavigateToPlans={() => setScreen('planning')}
-    onCreateTask={createTask}
     onPlanGenerated={reviewGeneratedPlan}
     onOpenTasks={() => setScreen('dashboard')}
+    onOpenProfile={() => setScreen('profile')}
   />;
 }
 
